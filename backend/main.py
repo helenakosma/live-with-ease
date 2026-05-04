@@ -44,7 +44,10 @@ def fetch_page_text(url: str) -> str:
         raise HTTPException(500, "Playwright not installed. Run: pip install playwright && playwright install chromium")
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        browser = p.chromium.launch(
+            headless=True,
+            args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
+        )
         page = browser.new_page()
         try:
             page.goto(url, wait_until="domcontentloaded", timeout=30_000)
