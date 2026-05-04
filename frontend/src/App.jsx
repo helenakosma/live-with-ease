@@ -1,6 +1,6 @@
 import { useState } from "react"
 
-const API = import.meta.env.VITE_API_URL || "http://localhost:8000"
+const API = (import.meta.env.VITE_API_URL || "http://localhost:8000").replace(/\/$/, "")
 
 const s = {
   page: { minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", padding: "48px 16px" },
