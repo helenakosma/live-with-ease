@@ -4,7 +4,7 @@ A web app for finding Toronto rentals within your budget, powered by AI.
 
 Paste any rental site URL, set your budget, and get a clean list of matching listings in seconds. Optionally email the results to yourself.
 
-![live-with-ease screenshot](https://i.imgur.com/placeholder.png)
+![live-with-ease screenshot](project2.png)
 
 ---
 
