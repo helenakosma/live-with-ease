@@ -189,8 +189,19 @@ def build_html_email(listings: list, budget: float, site_url: str) -> str:
 # ── Routes ────────────────────────────────────────────────────────────────────
 @app.post("/scrape")
 def scrape(req: ScrapeRequest):
-    page_text = fetch_page_text(req.url)
-    all_found = extract_listings_with_ai(page_text, req.url)
+    try:
+        page_text = fetch_page_text(req.url)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Page fetch failed: {type(e).__name__}: {e}")
+
+    try:
+        all_found = extract_listings_with_ai(page_text, req.url)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"AI extraction failed: {type(e).__name__}: {e}")
 
     listings = []
     for apt in all_found:
