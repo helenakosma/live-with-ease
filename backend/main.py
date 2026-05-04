@@ -1,10 +1,16 @@
 import json
 import os
 import re
-from datetime import date
+import uuid
+from contextlib import asynccontextmanager
+from datetime import date, datetime, timedelta
 
+import psycopg2
+from psycopg2.extras import RealDictCursor
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
 try:
@@ -13,7 +19,53 @@ try:
 except ImportError:
     pass
 
-app = FastAPI(title="live-with-ease API")
+
+# ── Database ──────────────────────────────────────────────────────────────────
+def get_db():
+    url = os.getenv("DATABASE_URL", "")
+    if not url:
+        raise HTTPException(500, "DATABASE_URL not set.")
+    return psycopg2.connect(url, cursor_factory=RealDictCursor, sslmode="require")
+
+def init_db():
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS subscriptions (
+                id TEXT PRIMARY KEY,
+                email TEXT NOT NULL,
+                site_url TEXT NOT NULL,
+                budget REAL NOT NULL,
+                frequency TEXT NOT NULL,
+                token TEXT NOT NULL UNIQUE,
+                created_at TIMESTAMP NOT NULL,
+                last_sent TIMESTAMP,
+                next_run TIMESTAMP NOT NULL
+            )
+        """)
+        conn.commit()
+        cur.close()
+        conn.close()
+        print("[INFO] Database initialised.")
+    except Exception as e:
+        print(f"[WARN] DB init failed: {e}")
+
+
+# ── Scheduler ─────────────────────────────────────────────────────────────────
+scheduler = AsyncIOScheduler()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_db()
+    scheduler.add_job(check_subscriptions, "interval", hours=1, id="subscription_check")
+    scheduler.start()
+    yield
+    scheduler.shutdown()
+
+
+# ── App ───────────────────────────────────────────────────────────────────────
+app = FastAPI(title="live-with-ease API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -35,13 +87,19 @@ class EmailRequest(BaseModel):
     site_url: str
     email: str
 
+class SubscribeRequest(BaseModel):
+    email: str
+    site_url: str
+    budget: float
+    frequency: str  # 'weekly' or 'monthly'
+
 
 # ── Page fetcher ──────────────────────────────────────────────────────────────
 def fetch_page_text(url: str) -> str:
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
-        raise HTTPException(500, "Playwright not installed. Run: pip install playwright && playwright install chromium")
+        raise HTTPException(500, "Playwright not installed.")
 
     with sync_playwright() as p:
         browser = p.chromium.launch(
@@ -51,7 +109,6 @@ def fetch_page_text(url: str) -> str:
         page = browser.new_page()
         try:
             page.goto(url, wait_until="domcontentloaded", timeout=30_000)
-            # Give JS a moment to render listings
             page.wait_for_timeout(3000)
         except Exception as e:
             browser.close()
@@ -70,11 +127,11 @@ def extract_listings_with_ai(page_text: str, site_url: str) -> list[dict]:
     try:
         from openai import OpenAI
     except ImportError:
-        raise HTTPException(500, "OpenAI SDK not installed. Run: pip install openai")
+        raise HTTPException(500, "OpenAI SDK not installed.")
 
     api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
-        raise HTTPException(500, "GROQ_API_KEY not set in .env file. Get a free key at https://console.groq.com")
+        raise HTTPException(500, "GROQ_API_KEY not set.")
 
     client = OpenAI(api_key=api_key, base_url="https://api.groq.com/openai/v1")
 
@@ -110,8 +167,26 @@ Page text:
         return []
 
 
+def filter_listings(all_found: list, budget: float, site_url: str) -> list:
+    listings = []
+    for apt in all_found:
+        try:
+            price = float(apt.get("price", 0))
+        except (TypeError, ValueError):
+            price = 0
+        if 0 < price < budget:
+            listings.append({
+                "building": apt.get("building", "Unknown"),
+                "area":     apt.get("area", ""),
+                "price":    price,
+                "url":      apt.get("url", site_url),
+            })
+    return listings
+
+
 # ── HTML email builder ────────────────────────────────────────────────────────
-def build_html_email(listings: list, budget: float, site_url: str) -> str:
+def build_html_email(listings: list, budget: float, site_url: str,
+                     unsubscribe_url: str = None, frequency: str = None) -> str:
     today = date.today().strftime("%B %d, %Y")
     count = len(listings)
     domain = re.sub(r"https?://(www\.)?", "", site_url).split("/")[0]
@@ -136,6 +211,10 @@ def build_html_email(listings: list, budget: float, site_url: str) -> str:
             </a>
           </td>
         </tr>"""
+
+    freq_note = f"You're receiving this because you subscribed to {frequency} updates." if frequency else ""
+    unsub_link = (f'<a href="{unsubscribe_url}" style="color:#9ca3af;">Unsubscribe</a>'
+                  if unsubscribe_url else "")
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -176,7 +255,7 @@ def build_html_email(listings: list, budget: float, site_url: str) -> str:
         <tr>
           <td style="background:#f9fafb; padding:16px 32px; border-top:1px solid #e5e7eb;">
             <p style="margin:0; font-size:12px; color:#9ca3af; text-align:center;">
-              Powered by live-with-ease
+              {freq_note} {unsub_link}
             </p>
           </td>
         </tr>
@@ -184,6 +263,70 @@ def build_html_email(listings: list, budget: float, site_url: str) -> str:
     </td></tr>
   </table>
 </body></html>"""
+
+
+# ── Email sender ──────────────────────────────────────────────────────────────
+def send_resend_email(to: str, subject: str, html: str):
+    import resend
+    resend.api_key = os.getenv("RESEND_API_KEY")
+    if not resend.api_key:
+        raise HTTPException(500, "RESEND_API_KEY not set.")
+    resend.Emails.send({
+        "from": "live-with-ease <onboarding@resend.dev>",
+        "to": [to],
+        "subject": subject,
+        "html": html,
+    })
+
+
+# ── Subscription checker (runs every hour) ────────────────────────────────────
+async def check_subscriptions():
+    print("[SCHEDULER] Checking subscriptions...")
+    now = datetime.utcnow()
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM subscriptions WHERE next_run <= %s", (now,))
+        due = cur.fetchall()
+        cur.close()
+        conn.close()
+    except Exception as e:
+        print(f"[SCHEDULER] DB error: {e}")
+        return
+
+    for sub in due:
+        try:
+            page_text = fetch_page_text(sub["site_url"])
+            all_found = extract_listings_with_ai(page_text, sub["site_url"])
+            listings  = filter_listings(all_found, sub["budget"], sub["site_url"])
+
+            if listings:
+                backend_url = os.getenv("RAILWAY_PUBLIC_DOMAIN", "")
+                if backend_url:
+                    backend_url = f"https://{backend_url}"
+                unsub_url = f"{backend_url}/unsubscribe/{sub['token']}" if backend_url else None
+                domain = re.sub(r"https?://(www\.)?", "", sub["site_url"]).split("/")[0]
+                html = build_html_email(listings, sub["budget"], sub["site_url"],
+                                        unsubscribe_url=unsub_url, frequency=sub["frequency"])
+                send_resend_email(
+                    sub["email"],
+                    f"🏠 {len(listings)} new listing{'s' if len(listings)!=1 else ''} on {domain}",
+                    html
+                )
+                print(f"[SCHEDULER] Sent {len(listings)} listings to {sub['email']}")
+
+            # Schedule next run
+            delta = timedelta(weeks=1) if sub["frequency"] == "weekly" else timedelta(days=30)
+            next_run = now + delta
+            conn = get_db()
+            cur = conn.cursor()
+            cur.execute("UPDATE subscriptions SET last_sent=%s, next_run=%s WHERE id=%s",
+                        (now, next_run, sub["id"]))
+            conn.commit()
+            cur.close()
+            conn.close()
+        except Exception as e:
+            print(f"[SCHEDULER] Failed for {sub['email']}: {e}")
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
@@ -194,51 +337,81 @@ def scrape(req: ScrapeRequest):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Page fetch failed: {type(e).__name__}: {e}")
+        raise HTTPException(500, f"Page fetch failed: {type(e).__name__}: {e}")
 
     try:
         all_found = extract_listings_with_ai(page_text, req.url)
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"AI extraction failed: {type(e).__name__}: {e}")
+        raise HTTPException(500, f"AI extraction failed: {type(e).__name__}: {e}")
 
-    listings = []
-    for apt in all_found:
-        try:
-            price = float(apt.get("price", 0))
-        except (TypeError, ValueError):
-            price = 0
-        if 0 < price < req.budget:
-            listings.append({
-                "building": apt.get("building", "Unknown"),
-                "area":     apt.get("area", ""),
-                "price":    price,
-                "url":      apt.get("url", req.url),
-            })
-
-    return {"listings": listings}
+    return {"listings": filter_listings(all_found, req.budget, req.url)}
 
 
 @app.post("/email")
 def send_email(req: EmailRequest):
-    try:
-        import resend
-    except ImportError:
-        raise HTTPException(500, "Resend not installed. Run: pip install resend")
-
-    resend.api_key = os.getenv("RESEND_API_KEY")
-    if not resend.api_key:
-        raise HTTPException(500, "RESEND_API_KEY not set in .env file.")
-
-    count = len(req.listings)
+    count  = len(req.listings)
     domain = re.sub(r"https?://(www\.)?", "", req.site_url).split("/")[0]
-
-    resend.Emails.send({
-        "from": "live-with-ease <onboarding@resend.dev>",
-        "to": [req.email],
-        "subject": f"🏠 {count} listing{'s' if count != 1 else ''} on {domain} under ${req.budget:,.0f}",
-        "html": build_html_email(req.listings, req.budget, req.site_url),
-    })
-
+    send_resend_email(
+        req.email,
+        f"🏠 {count} listing{'s' if count!=1 else ''} on {domain} under ${req.budget:,.0f}",
+        build_html_email(req.listings, req.budget, req.site_url)
+    )
     return {"success": True}
+
+
+@app.post("/subscribe")
+def subscribe(req: SubscribeRequest):
+    if req.frequency not in ("weekly", "monthly"):
+        raise HTTPException(400, "frequency must be 'weekly' or 'monthly'")
+
+    sub_id = str(uuid.uuid4())
+    token  = str(uuid.uuid4())
+    now    = datetime.utcnow()
+    delta  = timedelta(weeks=1) if req.frequency == "weekly" else timedelta(days=30)
+
+    try:
+        conn = get_db()
+        cur  = conn.cursor()
+        cur.execute("""
+            INSERT INTO subscriptions (id, email, site_url, budget, frequency, token, created_at, next_run)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        """, (sub_id, req.email, req.site_url, req.budget, req.frequency, token, now, now + delta))
+        conn.commit()
+        cur.close()
+        conn.close()
+    except Exception as e:
+        raise HTTPException(500, f"Could not save subscription: {e}")
+
+    return {"success": True, "message": f"Subscribed! You'll receive {req.frequency} updates."}
+
+
+@app.get("/unsubscribe/{token}", response_class=HTMLResponse)
+def unsubscribe(token: str):
+    try:
+        conn = get_db()
+        cur  = conn.cursor()
+        cur.execute("DELETE FROM subscriptions WHERE token = %s RETURNING email", (token,))
+        row = cur.fetchone()
+        conn.commit()
+        cur.close()
+        conn.close()
+    except Exception as e:
+        return HTMLResponse(f"<h2>Something went wrong: {e}</h2>", status_code=500)
+
+    if row:
+        return HTMLResponse("""<!DOCTYPE html><html><head><meta charset="UTF-8">
+        <style>body{{font-family:'Helvetica Neue',Arial,sans-serif;display:flex;align-items:center;
+        justify-content:center;min-height:100vh;margin:0;background:#f0f4ff}}
+        .box{{background:#fff;border-radius:16px;padding:48px;text-align:center;
+        box-shadow:0 2px 20px rgba(0,0,0,.08);max-width:400px}}</style></head>
+        <body><div class="box"><div style="font-size:48px">✅</div>
+        <h2 style="color:#1e293b;margin:16px 0 8px">Unsubscribed</h2>
+        <p style="color:#64748b">You've been removed from live-with-ease updates.</p>
+        <a href="https://live-with-ease.vercel.app" style="color:#2563eb">Back to app →</a>
+        </div></body></html>""")
+    else:
+        return HTMLResponse("""<!DOCTYPE html><html><body style="font-family:sans-serif;text-align:center;padding:48px">
+        <h2>Link not found</h2><p>This unsubscribe link may have already been used.</p>
+        </body></html>""", status_code=404)

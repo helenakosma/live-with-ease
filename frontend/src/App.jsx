@@ -50,10 +50,12 @@ export default function App() {
   const [loading, setLoading]       = useState(false)
   const [listings, setListings]     = useState(null)
   const [error, setError]           = useState("")
-  const [email, setEmail]           = useState("")
-  const [sending, setSending]       = useState(false)
-  const [emailSent, setEmailSent]   = useState(false)
-  const [emailError, setEmailError] = useState("")
+  const [email, setEmail]             = useState("")
+  const [frequency, setFrequency]     = useState("once")
+  const [sending, setSending]         = useState(false)
+  const [emailSent, setEmailSent]     = useState(false)
+  const [subscribed, setSubscribed]   = useState(false)
+  const [emailError, setEmailError]   = useState("")
 
   const handleSearch = async () => {
     if (!url || !budget) return
@@ -83,14 +85,25 @@ export default function App() {
     setSending(true)
     setEmailError("")
     try {
-      const res = await fetch(`${API}/email`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ listings, budget: parseFloat(budget), site_url: url, email }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.detail || "Failed to send email")
-      setEmailSent(true)
+      if (frequency === "once") {
+        const res = await fetch(`${API}/email`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ listings, budget: parseFloat(budget), site_url: url, email }),
+        })
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.detail || "Failed to send email")
+        setEmailSent(true)
+      } else {
+        const res = await fetch(`${API}/subscribe`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, site_url: url, budget: parseFloat(budget), frequency }),
+        })
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.detail || "Failed to subscribe")
+        setSubscribed(true)
+      }
     } catch (e) {
       setEmailError(e.message)
     } finally {
@@ -111,8 +124,8 @@ export default function App() {
         {/* Header */}
         <div style={s.header}>
           <div style={s.logo}>🏠</div>
-          <h1 style={s.title}>live-with-ease</h1>
-          <p style={s.subtitle}>Find Toronto rentals within your budget, powered by AI</p>
+          <h1 style={s.title}>Live With Ease</h1>
+          <p style={s.subtitle}>Find Toronto rentals within your budget!</p>
         </div>
 
         {/* Search card */}
@@ -185,7 +198,22 @@ export default function App() {
             {/* Email section */}
             {listings.length > 0 && (
               <div style={s.emailSection}>
-                <label style={s.label}>Email these results to yourself</label>
+                <label style={s.label}>Get these results</label>
+
+                {/* Frequency tabs */}
+                <div style={{ display: "flex", gap: "8px", marginBottom: "12px" }}>
+                  {[["once", "Send once"], ["weekly", "Weekly"], ["monthly", "Monthly"]].map(([val, label]) => (
+                    <button key={val} onClick={() => { setFrequency(val); setEmailSent(false); setSubscribed(false); setEmailError("") }}
+                      style={{ padding: "7px 16px", borderRadius: "8px", border: "1.5px solid",
+                        borderColor: frequency === val ? "#2563eb" : "#e2e8f0",
+                        background: frequency === val ? "#eff6ff" : "#fff",
+                        color: frequency === val ? "#2563eb" : "#64748b",
+                        fontWeight: "600", fontSize: "13px", cursor: "pointer", fontFamily: "inherit" }}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+
                 <div style={s.emailRow}>
                   <input
                     style={{ ...s.input, flex: 1 }}
@@ -201,11 +229,13 @@ export default function App() {
                     disabled={sending || !email}
                   >
                     {sending && <span style={s.spinner} />}
-                    {sending ? "Sending…" : "Send"}
+                    {sending ? (frequency === "once" ? "Sending…" : "Subscribing…") : (frequency === "once" ? "Send" : "Subscribe")}
                   </button>
                 </div>
-                {emailSent  && <div style={s.success}>✅ Email sent! Check your inbox.</div>}
-                {emailError && <div style={s.error}>⚠️ {emailError}</div>}
+
+                {emailSent   && <div style={s.success}>✅ Email sent! Check your inbox.</div>}
+                {subscribed  && <div style={s.success}>✅ Subscribed! You'll get {frequency} updates. Check your email for an unsubscribe link anytime.</div>}
+                {emailError  && <div style={s.error}>⚠️ {emailError}</div>}
               </div>
             )}
           </div>

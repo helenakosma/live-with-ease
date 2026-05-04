@@ -4,3 +4,5 @@ playwright
 openai
 resend
 python-dotenv
+psycopg2-binary
+apscheduler
