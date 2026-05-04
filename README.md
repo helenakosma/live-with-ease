@@ -1,8 +1,8 @@
 # 🏠 Live With Ease
 
-Are you a student or newgrad in toronto, struggling to stay up-to-date with affordable living? Live With Ease: A web app for finding Toronto rentals within your budget, with the help of AI.
+Are you a student or new grad in Toronto struggling to stay on top of affordable rentals? Live With Ease is a web app that scrapes any rental site, filters listings by your budget using AI, and emails you the results, once or on a recurring schedule.
 
-Paste any rental site URL, set your budget, and get a clean list of matching listings in seconds. Optionally, email the results to yourself, once or repeatedly, keeping you updated on new suitable places.
+**[→ Try it live](https://live-with-ease.vercel.app/)**
 
 ![live-with-ease screenshot](project2.png)
 
@@ -10,81 +10,65 @@ Paste any rental site URL, set your budget, and get a clean list of matching lis
 
 ## Features
 
-- 🔍 **Scrapes any rental site** — not locked to one source
-- 🤖 **AI-powered extraction** — no brittle CSS selectors, works across different site layouts
+- 🔍 **Scrapes any rental site** — paste any URL, not locked to one source
+- 🤖 **AI-powered extraction** — Llama 3 via Groq reads the page; no brittle CSS selectors
 - 💸 **Budget filtering** — only shows listings under your price limit
-- 📬 **Email digest** — send results to yourself with one click
-- 🔁 **Deduplication** — tracks seen listings so you only get notified about new ones
+- 📬 **One-time email digest** — send results to yourself with one click
+- 🔁 **Recurring subscriptions** — get weekly or monthly updates automatically
+- 🚪 **Unsubscribe anytime** — every recurring email includes a one-click unsubscribe link
 
 ---
 
 ## Tech Stack
 
-- **Frontend** — React + Vite
-- **Backend** — Python + FastAPI
-- **Browser automation** — Playwright (handling JavaScript-rendered pages)
-- **AI extraction** — Groq API (free) with Llama 3
-- **Email** — Resend API
-
----
-
-## Getting Started
-
-### 1. Clone the repo
-
-```bash
-git clone https://github.com/helenakosma/live-with-ease.git
-cd live-with-ease
-```
-
-### 2. Set up environment variables
-
-```bash
-cp .env.example .env
-```
-
-Fill in `.env` with your keys:
-
-| Variable | Where to get it |
+| Layer | Technology |
 |---|---|
-| `GROQ_API_KEY` | [console.groq.com](https://console.groq.com) — free |
-| `RESEND_API_KEY` | [resend.com](https://resend.com) — free |
-| `SITE_URL` | Any rental listings page URL |
-| `BUDGET` | Your monthly budget in CAD |
-| `EMAIL` | Your email address |
-
-### 3. Start the backend
-
-```bash
-cd backend
-pip install -r requirements.txt
-playwright install chromium
-uvicorn main:app --reload
-```
-
-### 4. Start the frontend
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-Open **http://localhost:5173** in your browser.
+| Frontend | React + Vite, deployed on Vercel |
+| Backend | Python + FastAPI, deployed on Railway |
+| Browser automation | Playwright (handles JS-rendered pages) |
+| AI extraction | Groq API (free) with Llama 3.1 |
+| Email | Resend API |
+| Database | PostgreSQL on Railway |
+| Scheduling | APScheduler (runs inside FastAPI) |
 
 ---
 
 ## Usage
 
-1. Paste a rental site URL (e.g. `https://www.zumper.com/apartments-for-rent/toronto-on`)
-2. Enter your monthly budget in CAD
-3. Hit **Search listings**
+1. Go to **[live-with-ease.vercel.app](https://live-with-ease.vercel.app/)**
+2. Paste any rental site URL (e.g. `https://www.zumper.com/apartments-for-rent/toronto-on`)
+3. Enter your monthly budget in CAD and hit **Search listings**
 4. Browse results — click **View →** to open any listing
-5. Optionally enter your email and hit **Send** to get a formatted digest in your inbox
+5. Enter your email and choose **Send once**, **Weekly**, or **Monthly**
+6. Recurring subscribers can unsubscribe anytime via the link in any email
+
+---
+
+## Running Locally
+
+Want to fork this and run it yourself? You'll need:
+
+| Variable | Where to get it |
+|---|---|
+| `GROQ_API_KEY` | [console.groq.com](https://console.groq.com) — free |
+| `RESEND_API_KEY` | [resend.com](https://resend.com) — free |
+| `DATABASE_URL` | PostgreSQL connection string |
+
+```bash
+# Backend
+cd backend && pip install -r requirements.txt
+playwright install chromium
+uvicorn main:app --reload
+
+# Frontend (new terminal)
+cd frontend && npm install && npm run dev
+```
+
+Open **http://localhost:5173**.
 
 ---
 
 ## Security
 
-- Never commit your `.env` file — it's listed in `.gitignore`
-- Use `.env.example` as a template and share that instead
+- Never commit your `.env` file — it's in `.gitignore`
+- Use `.env.example` as a template to share instead
