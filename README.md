@@ -1,8 +1,8 @@
-# 🏠 live-with-ease
+# 🏠 Live With Ease
 
-A web app for finding Toronto rentals within your budget, powered by AI.
+Are you a student or newgrad in toronto, struggling to stay up-to-date with affordable living? Live With Ease: A web app for finding Toronto rentals within your budget, with the help of AI.
 
-Paste any rental site URL, set your budget, and get a clean list of matching listings in seconds. Optionally email the results to yourself.
+Paste any rental site URL, set your budget, and get a clean list of matching listings in seconds. Optionally, email the results to yourself, once or repeatedly, keeping you updated on new suitable places.
 
 ![live-with-ease screenshot](project2.png)
 
@@ -22,8 +22,8 @@ Paste any rental site URL, set your budget, and get a clean list of matching lis
 
 - **Frontend** — React + Vite
 - **Backend** — Python + FastAPI
-- **Browser automation** — Playwright (handles JavaScript-rendered pages)
-- **AI extraction** — Groq (free) with Llama 3
+- **Browser automation** — Playwright (handling JavaScript-rendered pages)
+- **AI extraction** — Groq API (free) with Llama 3
 - **Email** — Resend API
 
 ---
