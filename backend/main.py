@@ -15,7 +15,10 @@ except ImportError:
 
 app = FastAPI(title="live-with-ease API")
 
-ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "*").split(",")
+ALLOWED_ORIGINS = os.getenv(
+    "ALLOWED_ORIGINS",
+    "https://live-with-ease.vercel.app,http://localhost:5173"
+).split(",")
 
 app.add_middleware(
     CORSMiddleware,
