@@ -31,28 +31,28 @@ def save_seen(url: str, seen: set):
 # ── Page fetcher (Playwright) ─────────────────────────────────────────────────
 def fetch_page_text(url: str) -> str:
     """
-    Renders the page in a real headless browser and returns its visible text.
-    Requires: pip install playwright && playwright install chromium
+    Fetches the page using requests + BeautifulSoup and returns visible text.
     """
-    try:
-        from playwright.sync_api import sync_playwright
-    except ImportError:
-        raise SystemExit("[ERROR] Playwright not installed.\nRun: pip install playwright && playwright install chromium")
+    import requests
+    from bs4 import BeautifulSoup
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
-        print(f"[INFO] Loading {url} ...")
-        try:
-            page.goto(url, timeout=30_000)
-            page.wait_for_load_state("networkidle", timeout=20_000)
-        except Exception as e:
-            browser.close()
-            raise RuntimeError(f"Page failed to load: {e}")
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/124.0.0.0 Safari/537.36"
+        ),
+        "Accept-Language": "en-US,en;q=0.9",
+    }
+    print(f"[INFO] Loading {url} ...")
+    resp = requests.get(url, headers=headers, timeout=30)
+    resp.raise_for_status()
 
-        # Extract visible text — much lighter than full HTML
-        text = page.inner_text("body")
-        browser.close()
+    soup = BeautifulSoup(resp.text, "html.parser")
+    # Remove script/style noise
+    for tag in soup(["script", "style", "noscript", "head"]):
+        tag.decompose()
+    text = soup.get_text(separator="\n", strip=True)
 
     # Trim to ~12,000 chars to stay within a reasonable token budget
     if len(text) > 12_000:
@@ -63,19 +63,19 @@ def fetch_page_text(url: str) -> str:
 # ── AI extraction ─────────────────────────────────────────────────────────────
 def extract_listings_with_ai(page_text: str, site_url: str) -> list[dict]:
     """
-    Sends the page text to OpenAI and asks it to extract rental listings as JSON.
-    Requires OPENAI_API_KEY in environment / .env file.
+    Sends the page text to Groq and asks it to extract rental listings as JSON.
+    Requires GROQ_API_KEY in environment / .env file.
     """
     try:
         from openai import OpenAI
     except ImportError:
         raise SystemExit("[ERROR] OpenAI SDK not installed.\nRun: pip install openai")
 
-    api_key = os.getenv("OPENAI_API_KEY")
+    api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
-        raise SystemExit("[ERROR] OPENAI_API_KEY not set. Add it to your .env file.")
+        raise SystemExit("[ERROR] GROQ_API_KEY not set. Add it to your .env file.")
 
-    client = OpenAI(api_key=api_key)
+    client = OpenAI(api_key=api_key, base_url="https://api.groq.com/openai/v1")
 
     prompt = f"""Below is the visible text scraped from a rental listings page: {site_url}
 
@@ -94,9 +94,9 @@ Rules:
 Page text:
 {page_text}"""
 
-    print("[INFO] Asking OpenAI to extract listings...")
+    print("[INFO] Asking Groq to extract listings...")
     response = client.chat.completions.create(
-        model="gpt-3.5-turbo",
+        model="llama3-8b-8192",
         max_tokens=2048,
         messages=[{"role": "user", "content": prompt}]
     )
