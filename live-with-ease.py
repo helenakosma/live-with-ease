@@ -96,8 +96,9 @@ Page text:
 
     print("[INFO] Asking Groq to extract listings...")
     response = client.chat.completions.create(
-        model="llama3-8b-8192",
-        max_tokens=2048,
+        model=os.getenv("GROQ_MODEL", "openai/gpt-oss-20b"),
+        max_tokens=8192,
+        reasoning_effort="low",
         messages=[{"role": "user", "content": prompt}]
     )
 

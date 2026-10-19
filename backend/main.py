@@ -151,8 +151,9 @@ Page text:
 {page_text}"""
 
     response = client.chat.completions.create(
-        model="llama-3.1-8b-instant",
-        max_tokens=2048,
+        model=os.getenv("GROQ_MODEL", "openai/gpt-oss-20b"),
+        max_tokens=8192,
+        reasoning_effort="low",
         messages=[{"role": "user", "content": prompt}]
     )
 

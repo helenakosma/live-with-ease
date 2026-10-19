@@ -11,7 +11,7 @@ Are you a student or new grad in Toronto struggling to stay on top of affordable
 ## Features
 
 - 🔍 **Scrapes any rental site** — paste any URL, not locked to one source
-- 🤖 **AI-powered extraction** — Llama 3 via Groq reads the page; no brittle CSS selectors
+- 🤖 **AI-powered extraction** — an open model (gpt-oss) via Groq reads the page; no brittle CSS selectors
 - 💸 **Budget filtering** — only shows listings under your price limit
 - 📬 **One-time email digest** — send results to yourself with one click
 - 🔁 **Recurring subscriptions** — get weekly or monthly updates automatically
@@ -26,7 +26,7 @@ Are you a student or new grad in Toronto struggling to stay on top of affordable
 | Frontend | React + Vite, deployed on Vercel |
 | Backend | Python + FastAPI, deployed on Railway |
 | Browser automation | Playwright (handles JS-rendered pages) |
-| AI extraction | Groq API (free) with Llama 3.1 |
+| AI extraction | Groq API (free) with gpt-oss-20b (override with `GROQ_MODEL`) |
 | Email | Resend API |
 | Database | PostgreSQL on Railway |
 | Scheduling | APScheduler (runs inside FastAPI) |
