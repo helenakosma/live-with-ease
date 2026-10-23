@@ -1,47 +1,63 @@
 import { useState } from "react"
+import { Stars, Skyline } from "./Scenery"
 
 const API = (import.meta.env.VITE_API_URL || "http://localhost:8000").replace(/\/$/, "")
 
+// palette pulled from the cover art
+const C = {
+  cream: "#ffecc8",
+  creamGlow: "#f7c568",
+  blue: "#bcdcfa",
+  blueGlow: "#4a90e2",
+  butter: "#efe7a5",
+  panel: "#101c29",
+  field: "#0b1520",
+  line: "#22354b",
+  text: "#e6edf5",
+  muted: "#8a9db3",
+}
+
 const s = {
-  page: { minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", padding: "48px 16px" },
+  page: { position: "relative", zIndex: 1, minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", padding: "64px 16px 0" },
   header: { textAlign: "center", marginBottom: "40px" },
-  logo: { fontSize: "36px", marginBottom: "8px" },
-  title: { fontSize: "28px", fontWeight: "700", color: "#1e40af", letterSpacing: "-0.5px" },
-  subtitle: { fontSize: "15px", color: "#64748b", marginTop: "6px" },
+  titleTop: { display: "block", fontFamily: "'Cherry Bomb One', sans-serif", fontWeight: 400, fontSize: "clamp(44px, 9vw, 64px)", lineHeight: 1, color: C.cream, textShadow: `0 0 6px ${C.creamGlow}aa, 0 0 22px ${C.creamGlow}55`, transform: "rotate(-3deg)" },
+  titleBottom: { display: "block", fontFamily: "'Cherry Bomb One', sans-serif", fontWeight: 400, fontSize: "clamp(64px, 14vw, 104px)", lineHeight: 1.05, color: C.blue, textShadow: `0 0 8px ${C.blueGlow}aa, 0 0 28px ${C.blueGlow}66`, marginTop: "-4px" },
+  subtitle: { fontSize: "16px", color: C.muted, marginTop: "18px", fontWeight: "600" },
 
-  card: { background: "#fff", borderRadius: "16px", boxShadow: "0 2px 20px rgba(0,0,0,0.08)", padding: "32px", width: "100%", maxWidth: "640px", marginBottom: "24px" },
+  card: { background: C.panel, border: `1px solid ${C.line}`, borderRadius: "18px", boxShadow: "0 16px 40px rgba(0,0,0,0.35)", padding: "clamp(18px, 5vw, 28px)", width: "100%", maxWidth: "600px", marginBottom: "20px" },
 
-  label: { display: "block", fontSize: "13px", fontWeight: "600", color: "#374151", marginBottom: "6px" },
-  input: { width: "100%", padding: "10px 14px", border: "1.5px solid #e2e8f0", borderRadius: "8px", fontSize: "14px", outline: "none", transition: "border 0.15s", fontFamily: "inherit" },
+  label: { display: "block", fontSize: "13px", fontWeight: "700", color: C.muted, marginBottom: "8px" },
+  input: { width: "100%", padding: "12px 14px", border: `1px solid ${C.line}`, background: C.field, borderRadius: "10px", fontSize: "15px", color: C.text, outline: "none", transition: "border-color 0.15s, box-shadow 0.15s", fontFamily: "inherit" },
 
-  row: { display: "flex", gap: "12px", marginTop: "16px" },
+  row: { display: "flex", gap: "12px", marginTop: "18px" },
   budgetWrap: { flex: "0 0 160px" },
 
-  btn: { width: "100%", padding: "12px", borderRadius: "8px", border: "none", cursor: "pointer", fontSize: "15px", fontWeight: "600", transition: "opacity 0.15s, transform 0.1s", fontFamily: "inherit" },
-  btnPrimary: { background: "#2563eb", color: "#fff" },
-  btnSuccess: { background: "#16a34a", color: "#fff" },
-  btnSm: { padding: "8px 18px", fontSize: "13px", borderRadius: "6px", border: "none", cursor: "pointer", fontWeight: "600", fontFamily: "inherit" },
+  btn: { width: "100%", padding: "13px", borderRadius: "10px", border: "none", cursor: "pointer", fontSize: "15px", fontWeight: "800", fontFamily: "inherit" },
+  btnPrimary: { background: C.cream, color: "#1a1408", boxShadow: "inset 0 -3px 0 #e2c48a" },
+  btnSuccess: { background: C.blue, color: "#0b1724", boxShadow: "inset 0 -3px 0 #8db8e3" },
+  btnSm: { padding: "8px 18px", fontSize: "13px", borderRadius: "8px", border: "none", cursor: "pointer", fontWeight: "700", fontFamily: "inherit" },
 
-  error: { background: "#fef2f2", border: "1px solid #fecaca", color: "#dc2626", borderRadius: "8px", padding: "12px 16px", fontSize: "14px", marginTop: "12px" },
-  success: { background: "#f0fdf4", border: "1px solid #bbf7d0", color: "#16a34a", borderRadius: "8px", padding: "12px 16px", fontSize: "14px", marginTop: "12px" },
+  error: { background: "#2a1418", border: "1px solid #5c2a33", color: "#ffb3bf", borderRadius: "10px", padding: "11px 14px", fontSize: "14px", marginTop: "14px" },
+  success: { background: "#11261f", border: "1px solid #24503f", color: "#a8f0d6", borderRadius: "10px", padding: "11px 14px", fontSize: "14px", marginTop: "14px" },
 
-  resultsHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" },
-  resultsTitle: { fontSize: "17px", fontWeight: "700" },
-  count: { fontSize: "13px", color: "#64748b", background: "#f1f5f9", padding: "4px 10px", borderRadius: "99px" },
+  resultsHeader: { display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: "8px", marginBottom: "14px" },
+  resultsTitle: { fontSize: "18px", fontWeight: "800", color: C.text },
+  count: { fontSize: "13px", fontWeight: "600", color: C.muted },
 
-  listingCard: { border: "1.5px solid #e2e8f0", borderRadius: "10px", padding: "16px", marginBottom: "10px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", transition: "border-color 0.15s" },
+  listingCard: { padding: "14px 2px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", borderTop: `1px solid ${C.line}` },
   listingLeft: { flex: 1, minWidth: 0 },
-  listingName: { fontWeight: "600", fontSize: "15px", color: "#1e293b", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
-  listingArea: { fontSize: "13px", color: "#64748b", marginTop: "2px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
-  listingRight: { display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "8px", flexShrink: 0 },
-  price: { fontWeight: "700", fontSize: "16px", color: "#16a34a" },
-  viewBtn: { background: "#eff6ff", color: "#2563eb", padding: "5px 12px", borderRadius: "6px", fontSize: "13px", fontWeight: "600", textDecoration: "none", whiteSpace: "nowrap" },
+  listingName: { fontWeight: "700", fontSize: "15px", color: C.text, lineHeight: 1.35 },
+  listingArea: { fontSize: "13px", color: C.muted, marginTop: "2px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
+  listingRight: { display: "flex", alignItems: "center", gap: "14px", flexShrink: 0 },
+  price: { fontWeight: "800", fontSize: "15px", color: C.butter, fontVariantNumeric: "tabular-nums" },
+  viewBtn: { color: C.blue, fontSize: "13px", fontWeight: "700", textDecoration: "none", whiteSpace: "nowrap" },
 
-  emailSection: { marginTop: "8px", paddingTop: "20px", borderTop: "1px solid #e2e8f0" },
-  emailRow: { display: "flex", gap: "10px", marginTop: "10px" },
+  emailSection: { marginTop: "6px", paddingTop: "20px", borderTop: `1px solid ${C.line}` },
+  segment: { display: "inline-flex", padding: "3px", background: C.field, border: `1px solid ${C.line}`, borderRadius: "10px", marginBottom: "12px" },
+  emailRow: { display: "flex", flexWrap: "wrap", gap: "10px" },
 
-  spinner: { display: "inline-block", width: "18px", height: "18px", border: "3px solid rgba(255,255,255,0.4)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 0.7s linear infinite", marginRight: "8px", verticalAlign: "middle" },
-  empty: { textAlign: "center", color: "#94a3b8", padding: "32px 0", fontSize: "15px" },
+  spinner: { display: "inline-block", width: "16px", height: "16px", border: "2px solid rgba(0,0,0,0.2)", borderTopColor: "currentColor", borderRadius: "50%", animation: "spin 0.7s linear infinite", marginRight: "8px", verticalAlign: "-3px" },
+  empty: { textAlign: "center", color: C.muted, padding: "28px 0 12px", fontSize: "15px", lineHeight: 1.6, borderTop: `1px solid ${C.line}` },
 }
 
 export default function App() {
@@ -113,19 +129,16 @@ export default function App() {
 
   return (
     <>
-      <style>{`
-        @keyframes spin { to { transform: rotate(360deg); } }
-        input:focus { border-color: #2563eb !important; box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
-        .listing-card:hover { border-color: #93c5fd !important; }
-        button:active { transform: scale(0.98); }
-      `}</style>
+      <Stars />
 
       <div style={s.page}>
         {/* Header */}
         <div style={s.header}>
-          <div style={s.logo}>🏠</div>
-          <h1 style={s.title}>Live With Ease</h1>
-          <p style={s.subtitle}>Find Toronto rentals within your budget!</p>
+          <h1 aria-label="Live With Ease">
+            <span style={s.titleTop}>live with</span>
+            <span style={s.titleBottom}>ease</span>
+          </h1>
+          <p style={s.subtitle}>Toronto rentals that actually fit your budget.</p>
         </div>
 
         {/* Search card */}
@@ -167,29 +180,29 @@ export default function App() {
             </button>
           </div>
 
-          {error && <div style={s.error}>⚠️ {error}</div>}
+          {error && <div style={s.error}>{error}</div>}
         </div>
 
         {/* Results card */}
         {listings !== null && (
           <div style={s.card}>
             <div style={s.resultsHeader}>
-              <span style={s.resultsTitle}>Results</span>
-              <span style={s.count}>{listings.length} listing{listings.length !== 1 ? "s" : ""} found</span>
+              <span style={s.resultsTitle}>Under ${parseFloat(budget).toLocaleString()}/mo</span>
+              <span style={s.count}>{listings.length} listing{listings.length !== 1 ? "s" : ""}</span>
             </div>
 
             {listings.length === 0 ? (
-              <div style={s.empty}>No listings found under ${parseFloat(budget).toLocaleString()}/mo.<br />Try a different site or raise your budget.</div>
+              <div style={s.empty}>Nothing under ${parseFloat(budget).toLocaleString()}/mo.<br />Try a different site or raise your budget.</div>
             ) : (
               listings.map((apt, i) => (
                 <div key={i} className="listing-card" style={s.listingCard}>
                   <div style={s.listingLeft}>
                     <div style={s.listingName}>{apt.building}</div>
-                    {apt.area && <div style={s.listingArea}>📍 {apt.area}</div>}
+                    {apt.area && <div style={s.listingArea}>{apt.area}</div>}
                   </div>
                   <div style={s.listingRight}>
                     <span style={s.price}>${apt.price.toLocaleString()}/mo</span>
-                    <a href={apt.url} target="_blank" rel="noreferrer" style={s.viewBtn}>View →</a>
+                    <a href={apt.url} target="_blank" rel="noreferrer" className="view-btn" style={s.viewBtn}>View ↗</a>
                   </div>
                 </div>
               ))
@@ -198,17 +211,16 @@ export default function App() {
             {/* Email section */}
             {listings.length > 0 && (
               <div style={s.emailSection}>
-                <label style={s.label}>Get these results</label>
+                <label style={s.label}>Email me these results</label>
 
                 {/* Frequency tabs */}
-                <div style={{ display: "flex", gap: "8px", marginBottom: "12px" }}>
+                <div style={s.segment}>
                   {[["once", "Send once"], ["weekly", "Weekly"], ["monthly", "Monthly"]].map(([val, label]) => (
                     <button key={val} onClick={() => { setFrequency(val); setEmailSent(false); setSubscribed(false); setEmailError("") }}
-                      style={{ padding: "7px 16px", borderRadius: "8px", border: "1.5px solid",
-                        borderColor: frequency === val ? "#2563eb" : "#e2e8f0",
-                        background: frequency === val ? "#eff6ff" : "#fff",
-                        color: frequency === val ? "#2563eb" : "#64748b",
-                        fontWeight: "600", fontSize: "13px", cursor: "pointer", fontFamily: "inherit" }}>
+                      style={{ padding: "6px 14px", borderRadius: "7px", border: "none",
+                        background: frequency === val ? C.line : "transparent",
+                        color: frequency === val ? C.text : C.muted,
+                        fontWeight: "700", fontSize: "13px", cursor: "pointer", fontFamily: "inherit" }}>
                       {label}
                     </button>
                   ))}
@@ -216,7 +228,7 @@ export default function App() {
 
                 <div style={s.emailRow}>
                   <input
-                    style={{ ...s.input, flex: 1 }}
+                    style={{ ...s.input, flex: "1 1 200px" }}
                     type="email"
                     placeholder="you@example.com"
                     value={email}
@@ -224,7 +236,7 @@ export default function App() {
                     onKeyDown={e => e.key === "Enter" && handleEmail()}
                   />
                   <button
-                    style={{ ...s.btn, ...s.btnSuccess, width: "auto", padding: "10px 20px", fontSize: "14px", opacity: sending || !email ? 0.7 : 1 }}
+                    style={{ ...s.btn, ...s.btnSuccess, width: "auto", flex: "0 0 auto", padding: "12px 22px", opacity: sending || !email ? 0.7 : 1 }}
                     onClick={handleEmail}
                     disabled={sending || !email}
                   >
@@ -233,13 +245,16 @@ export default function App() {
                   </button>
                 </div>
 
-                {emailSent   && <div style={s.success}>✅ Email sent! Check your inbox.</div>}
-                {subscribed  && <div style={s.success}>✅ Subscribed! You'll get {frequency} updates. Check your email for an unsubscribe link anytime.</div>}
-                {emailError  && <div style={s.error}>⚠️ {emailError}</div>}
+                {emailSent   && <div style={s.success}>Sent. Check your inbox.</div>}
+                {subscribed  && <div style={s.success}>You're subscribed to {frequency} updates. Every email has an unsubscribe link.</div>}
+                {emailError  && <div style={s.error}>{emailError}</div>}
               </div>
             )}
           </div>
         )}
+
+        <div style={{ flex: 1, minHeight: "40px" }} />
+        <Skyline />
       </div>
     </>
   )
