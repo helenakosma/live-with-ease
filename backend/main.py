@@ -95,27 +95,55 @@ class SubscribeRequest(BaseModel):
 
 
 # ── Page fetcher ──────────────────────────────────────────────────────────────
+# Heavy listing sites (Zumper etc.) crash Chromium inside the container by running
+# it out of memory. We only need the page text, so skip everything visual and the
+# ad/analytics scripts, which make up most of the weight.
+BLOCKED_TYPES = {"image", "media", "font"}
+BLOCKED_HOSTS = ("doubleclick", "googlesyndication", "googletagmanager", "google-analytics",
+                 "facebook", "hotjar", "segment", "amplitude", "criteo", "adnxs", "taboola",
+                 "outbrain", "branch.io", "sentry", "datadog", "newrelic", "optimizely")
+
+def _skip_heavy(route):
+    req = route.request
+    if req.resource_type in BLOCKED_TYPES or any(h in req.url for h in BLOCKED_HOSTS):
+        return route.abort()
+    return route.continue_()
+
+def _load_text_once(p, url: str) -> str:
+    browser = p.chromium.launch(
+        headless=True,
+        args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage",
+              "--disable-gpu", "--disable-extensions", "--blink-settings=imagesEnabled=false"]
+    )
+    try:
+        page = browser.new_page(viewport={"width": 1280, "height": 900})
+        page.route("**/*", _skip_heavy)
+        page.goto(url, wait_until="domcontentloaded", timeout=30_000)
+        page.wait_for_timeout(3000)
+        return page.evaluate("document.body ? document.body.innerText : ''")
+    finally:
+        browser.close()
+
 def fetch_page_text(url: str) -> str:
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
         raise HTTPException(500, "Playwright not installed.")
 
+    last_error = None
     with sync_playwright() as p:
-        browser = p.chromium.launch(
-            headless=True,
-            args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
-        )
-        page = browser.new_page()
-        try:
-            page.goto(url, wait_until="domcontentloaded", timeout=30_000)
-            page.wait_for_timeout(3000)
-        except Exception as e:
-            browser.close()
-            raise HTTPException(502, f"Page failed to load: {e}")
-
-        text = page.inner_text("body")
-        browser.close()
+        for _ in range(2):  # a fresh browser usually survives a one-off crash
+            try:
+                text = _load_text_once(p, url)
+                break
+            except Exception as e:
+                last_error = e
+                print(f"[WARN] Page fetch attempt failed: {e}")
+        else:
+            msg = str(last_error).split("\n")[0]
+            if "crash" in msg.lower():
+                raise HTTPException(502, "That site is too heavy for our page reader right now. Try again, or try a different listings page.")
+            raise HTTPException(502, f"Page failed to load: {msg}")
 
     if len(text) > 12_000:
         text = text[:12_000] + "\n...[truncated]"
